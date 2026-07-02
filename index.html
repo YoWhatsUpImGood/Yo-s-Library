@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yo's Library</title>
+<style>
+  :root{
+    --bg:#000000;
+    --fg:#ffffff;
+    --dim:#888888;
+    --border:#333333;
+    --mono: 'Courier New', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:var(--mono);
+    min-height:100vh;
+  }
+  .wrap{
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 24px 16px 60px;
+  }
+
+  /* ---------- HOME ---------- */
+  #home{
+    min-height: 90vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+  }
+  #home h1{
+    font-size: 2rem;
+    letter-spacing: 4px;
+    margin: 0 0 10px;
+    font-weight: normal;
+  }
+  #home p{
+    color: var(--dim);
+    font-size: 0.85rem;
+    margin: 0 0 30px;
+    max-width: 420px;
+    line-height: 1.5;
+  }
+
+  button{
+    background: transparent;
+    border: 1px solid var(--fg);
+    color: var(--fg);
+    padding: 12px 28px;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+    cursor: pointer;
+  }
+  button:hover{ background: rgba(255,255,255,0.1); }
+  button.ghost{
+    border-color: var(--border);
+    color: var(--dim);
+  }
+  button.ghost:hover{ color: var(--fg); border-color: var(--fg); }
+
+  /* ---------- LIBRARY ---------- */
+  #library{ display:none; }
+  .topbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 14px;
+    margin-bottom: 20px;
+  }
+  .topbar h2{
+    font-size: 1rem;
+    letter-spacing: 2px;
+    margin:0;
+    font-weight:normal;
+  }
+  .backlink{
+    color: var(--dim);
+    cursor:pointer;
+    font-size: 0.75rem;
+    text-decoration: underline;
+  }
+  .backlink:hover{ color: var(--fg); }
+
+  .mode-toggle{
+    display:flex;
+    gap: 0;
+    margin-bottom: 20px;
+  }
+  .mode-toggle button{
+    flex:1;
+    border-color: var(--border);
+    color: var(--dim);
+  }
+  .mode-toggle button.active{
+    color: var(--fg);
+    border-color: var(--fg);
+  }
+
+  label{
+    display:block;
+    font-size: 0.7rem;
+    color: var(--dim);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+    margin-top: 14px;
+  }
+  input[type=text], textarea, input[type=number]{
+    width:100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+  }
+  input:focus, textarea:focus{ outline:none; border-color: var(--fg); }
+  textarea{ min-height: 70px; resize: vertical; }
+
+  .coords{
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .actions{ margin-top: 16px; display:flex; gap:8px; flex-wrap:wrap; }
+
+  .address{
+    margin-top: 18px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    font-size: 0.75rem;
+    color: var(--dim);
+    word-break: break-all;
+  }
+
+  .page{
+    margin-top: 14px;
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.55;
+    font-size: 0.9rem;
+    max-height: 440px;
+    overflow-y: auto;
+  }
+
+  .error{
+    font-size: 0.75rem;
+    margin-top: 10px;
+    font-weight:bold;
+  }
+
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  canvas{
+    width: 380px;
+    height: 380px;
+    border: 1px solid var(--border);
+    background: #000;
+    max-width: 100%;
+  }
+  #i-canvas{
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  #img-canvas{
+    image-rendering: auto;
+  }
+  input[type=file]{
+    width:100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- HOME PAGE -->
+  <div id="home">
+    <h1>YO'S LIBRARY</h1>
+    <p>Every possible page already exists. Nothing here is stored — it's computed from an address, the same way every time.</p>
+    <div class="actions" style="justify-content:center;">
+      <button onclick="goToLibrary()">ENTER LIBRARY</button>
+      <button class="ghost" onclick="goToAbout()">ABOUT</button>
+    </div>
+  </div>
+
+  <!-- ABOUT PAGE -->
+  <div id="about" style="display:none;">
+    <div class="topbar">
+      <h2>ABOUT</h2>
+      <span class="backlink" onclick="goHome()">← home</span>
+    </div>
+    <div class="page" style="max-height:none;">
+WHAT THIS IS
+
+Yo's Library is a space that contains every possible page of text,
+and now every possible image, without storing any of them.
+
+Nothing is saved anywhere. Every page or image is computed on the
+spot from its address (hexagon / volume / page), using that address
+as a seed for a deterministic generator. Feed it the same address
+twice, get the exact same result twice — but nothing exists until
+you ask for it.
+
+TEXT
+
+Each page holds 3,200 characters drawn from a 29-symbol alphabet
+(a-z, space, comma, period). SEARCH works in reverse: type any text,
+and it's hashed into a valid address that reproduces a page
+containing your exact words.
+
+IMAGES
+
+BROWSE generates a 200x200 grid of random grayscale pixels, seeded
+the same way as text pages. UPLOAD lets you drop in a real photo,
+which gets hashed into its own address and displayed at full
+resolution and color.
+
+WHY IT'S ALL NOISE
+
+Almost everything you'll ever open here is gibberish — meaningless
+text, static-like images. That's not a bug, it's the entire point of
+the original concept. A page of English prose is one incredibly rare
+outcome among 29^3200 possible pages. That number has roughly 4,677
+digits.
+
+For comparison: the number of atoms in the entire observable universe
+is only about 10^80 — a mere 81 digits. The space of possible pages
+in this library dwarfs the atoms in the universe so completely that
+the comparison barely means anything. You could search forever and
+almost certainly never see two identical pages of readable text.
+
+The same logic applies to images. A 200x200 grayscale image has
+256^40000 possible pixel arrangements. Real, recognizable pictures —
+faces, landscapes, anything with edges and structure — occupy a
+practically invisible sliver of that space. You could generate images
+continuously since the beginning of time and never once land on
+something that looks like a photograph. Pure noise is not just the
+likely outcome here — it is, for all practical purposes, the only
+possible outcome.
+
+Everything runs client-side in your browser. Nothing you type or
+upload is ever sent anywhere.
+    </div>
+    <div class="actions">
+      <button onclick="goToLibrary()">ENTER LIBRARY</button>
+    </div>
+  </div>
+
+  <!-- LIBRARY -->
+  <div id="library">
+    <div class="topbar">
+      <h2>YO'S LIBRARY</h2>
+      <span class="backlink" onclick="goHome()">← home</span>
+    </div>
+
+    <div class="mode-toggle">
+      <button id="btn-browse" class="active" onclick="setMode('browse')">BROWSE</button>
+      <button id="btn-search" onclick="setMode('search')">SEARCH</button>
+      <button id="btn-images" onclick="setMode('images')">IMAGES</button>
+    </div>
+
+    <!-- BROWSE VIEW -->
+    <div class="view active" id="view-browse">
+      <div class="coords">
+        <div>
+          <label>HEXAGON</label>
+          <input type="text" id="b-hex" value="1">
+        </div>
+        <div>
+          <label>VOLUME</label>
+          <input type="number" id="b-vol" value="1" min="1" max="32">
+        </div>
+        <div>
+          <label>PAGE</label>
+          <input type="number" id="b-page" value="1" min="1" max="410">
+        </div>
+      </div>
+      <div class="actions">
+        <button onclick="renderBrowse()">OPEN PAGE</button>
+        <button class="ghost" onclick="randomAddress()">RANDOM</button>
+      </div>
+      <div class="address" id="b-address"></div>
+      <div class="page" id="b-output"></div>
+    </div>
+
+    <!-- SEARCH VIEW -->
+    <div class="view" id="view-search">
+      <label>ENTER TEXT (a-z, space, comma, period)</label>
+      <textarea id="s-input" placeholder="the truth is out there"></textarea>
+      <div class="actions">
+        <button onclick="doSearch()">LOCATE PAGE</button>
+      </div>
+      <div class="error" id="s-error"></div>
+      <div class="address" id="s-address" style="display:none;"></div>
+      <div class="page" id="s-output" style="display:none;"></div>
+    </div>
+
+    <!-- IMAGES VIEW -->
+    <div class="view" id="view-images">
+      <div class="mode-toggle" style="margin-bottom:16px;">
+        <button id="btn-img-browse" class="active" onclick="setImgMode('browse')">BROWSE</button>
+        <button id="btn-img-search" onclick="setImgMode('search')">UPLOAD</button>
+      </div>
+
+      <!-- image browse -->
+      <div class="view active" id="imgview-browse">
+        <div class="coords">
+          <div>
+            <label>HEXAGON</label>
+            <input type="text" id="i-hex" value="1">
+          </div>
+          <div>
+            <label>VOLUME</label>
+            <input type="number" id="i-vol" value="1" min="1" max="32">
+          </div>
+          <div>
+            <label>PAGE</label>
+            <input type="number" id="i-page" value="1" min="1" max="410">
+          </div>
+        </div>
+        <div class="actions">
+          <button onclick="renderImage()">OPEN IMAGE</button>
+          <button class="ghost" onclick="randomImageAddress()">RANDOM</button>
+        </div>
+        <div class="address" id="i-address"></div>
+        <div class="page" id="i-canvas-wrap" style="display:flex; justify-content:center; padding:20px;">
+          <canvas id="i-canvas" width="200" height="200"></canvas>
+        </div>
+      </div>
+
+      <!-- image search / upload -->
+      <div class="view" id="imgview-search">
+        <label>UPLOAD AN IMAGE</label>
+        <input type="file" id="img-upload" accept="image/*" onchange="handleImageUpload(event)">
+        <div class="error" id="img-error"></div>
+        <div class="address" id="img-address" style="display:none;"></div>
+        <div class="page" id="img-canvas-wrap" style="display:none; justify-content:center; padding:20px;">
+          <canvas id="img-canvas" width="256" height="256"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const ALPHABET = "abcdefghijklmnopqrstuvwxyz ,.";
+const BASE = ALPHABET.length;
+const LINE_LEN = 80;
+const LINES = 40;
+const PAGE_LEN = LINE_LEN * LINES;
+
+async function sha256Hex(str){
+  const enc = new TextEncoder().encode(str);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function hexToBigInt(hex){ return BigInt('0x' + hex); }
+
+function makeRng(seedBig){
+  let state = seedBig & ((1n << 64n) - 1n);
+  if(state === 0n) state = 0x9E3779B97F4A7C15n;
+  const MUL = 6364136223846793005n;
+  const INC = 1442695040888963407n;
+  const MASK = (1n << 64n) - 1n;
+  return function next(){
+    state = (state * MUL + INC) & MASK;
+    let x = state;
+    x ^= (x >> 33n);
+    x = (x * 0xff51afd7ed558ccdn) & MASK;
+    x ^= (x >> 33n);
+    return x;
+  };
+}
+
+async function generatePage(address){
+  const hex = await sha256Hex(address);
+  const seed = hexToBigInt(hex);
+  const rng = makeRng(seed);
+  let out = '';
+  for(let i=0;i<PAGE_LEN;i++){
+    const r = rng();
+    out += ALPHABET[Number(r % BigInt(BASE))];
+  }
+  return out;
+}
+
+function formatPage(raw){
+  let lines = [];
+  for(let i=0;i<LINES;i++) lines.push(raw.slice(i*LINE_LEN, (i+1)*LINE_LEN));
+  return lines.join('\n');
+}
+
+function buildAddress(hex, vol, page){
+  return `hex:${hex}|vol:${vol}|page:${page}`;
+}
+function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
+
+async function renderBrowse(){
+  const hex = document.getElementById('b-hex').value.trim() || '1';
+  const vol = clamp(parseInt(document.getElementById('b-vol').value)||1,1,32);
+  const page = clamp(parseInt(document.getElementById('b-page').value)||1,1,410);
+  document.getElementById('b-vol').value = vol;
+  document.getElementById('b-page').value = page;
+
+  const address = buildAddress(hex, vol, page);
+  document.getElementById('b-address').textContent = address;
+  document.getElementById('b-output').textContent = 'computing...';
+
+  const raw = await generatePage(address);
+  document.getElementById('b-output').textContent = formatPage(raw);
+}
+
+function randomAddress(){
+  document.getElementById('b-hex').value = Math.random().toString(36).slice(2,10);
+  document.getElementById('b-vol').value = 1 + Math.floor(Math.random()*32);
+  document.getElementById('b-page').value = 1 + Math.floor(Math.random()*410);
+  renderBrowse();
+}
+
+async function doSearch(){
+  const errEl = document.getElementById('s-error');
+  errEl.textContent = '';
+  let raw = document.getElementById('s-input').value.toLowerCase();
+
+  // sanitize: normalize whitespace, drop apostrophes/quotes, replace
+  // anything else not in the alphabet with a space
+  let text = raw
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/['’‘"“”]/g, '')
+    .split('')
+    .map(c => ALPHABET.includes(c) ? c : ' ')
+    .join('')
+    .replace(/ +/g, ' ')
+    .trim();
+
+  if(text.length === 0){
+    errEl.textContent = `Enter some text first.`;
+    return;
+  }
+  if(text.length > PAGE_LEN){
+    errEl.textContent = `Too long: ${text.length}/${PAGE_LEN} max — trimming to fit.`;
+    text = text.slice(0, PAGE_LEN);
+  }
+
+  const hex = await sha256Hex('babel-content-seed:' + text);
+  const big = hexToBigInt(hex);
+  const vol = Number(big % 32n) + 1;
+  const page = Number((big / 32n) % 410n) + 1;
+  const hexName = hex.slice(0,12);
+
+  const address = buildAddress(hexName, vol, page);
+  const padSeedAddress = address + '|content:' + text;
+  const fullRaw = await generatePage(padSeedAddress);
+  const composed = text + fullRaw.slice(text.length);
+
+  document.getElementById('s-address').style.display = 'block';
+  document.getElementById('s-address').textContent = address + '  (searched: "' + text + '")';
+  document.getElementById('s-output').style.display = 'block';
+  document.getElementById('s-output').textContent = formatPage(composed);
+}
+
+function setMode(mode){
+  document.getElementById('btn-browse').classList.toggle('active', mode==='browse');
+  document.getElementById('btn-search').classList.toggle('active', mode==='search');
+  document.getElementById('btn-images').classList.toggle('active', mode==='images');
+  document.getElementById('view-browse').classList.toggle('active', mode==='browse');
+  document.getElementById('view-search').classList.toggle('active', mode==='search');
+  document.getElementById('view-images').classList.toggle('active', mode==='images');
+  if(mode === 'images') renderImage();
+}
+
+function setImgMode(mode){
+  document.getElementById('btn-img-browse').classList.toggle('active', mode==='browse');
+  document.getElementById('btn-img-search').classList.toggle('active', mode==='search');
+  document.getElementById('imgview-browse').classList.toggle('active', mode==='browse');
+  document.getElementById('imgview-search').classList.toggle('active', mode==='search');
+}
+
+// ---------- IMAGES ----------
+const NOISE_GRID = 200;   // resolution for generated (procedural) noise images
+const UPLOAD_GRID = 256;  // resolution for uploaded image reproduction
+
+async function bytesFromAddress(address, count){
+  // derive enough pseudorandom bytes for `count` grayscale pixels
+  // by chaining the seeded RNG (each rng() call yields a 64-bit value,
+  // we slice bytes out of it)
+  const hex = await sha256Hex(address);
+  const seed = hexToBigInt(hex);
+  const rng = makeRng(seed);
+  const bytes = new Uint8Array(count);
+  let i = 0;
+  while(i < count){
+    let r = rng();
+    for(let k=0;k<8 && i<count;k++){
+      bytes[i] = Number(r & 0xFFn);
+      r >>= 8n;
+      i++;
+    }
+  }
+  return bytes;
+}
+
+function drawGrayscale(canvas, bytes, size){
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(size, size);
+  for(let i=0;i<size*size;i++){
+    const v = bytes[i];
+    imgData.data[i*4+0] = v;
+    imgData.data[i*4+1] = v;
+    imgData.data[i*4+2] = v;
+    imgData.data[i*4+3] = 255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+async function renderImage(){
+  const hex = document.getElementById('i-hex').value.trim() || '1';
+  const vol = clamp(parseInt(document.getElementById('i-vol').value)||1,1,32);
+  const page = clamp(parseInt(document.getElementById('i-page').value)||1,1,410);
+  document.getElementById('i-vol').value = vol;
+  document.getElementById('i-page').value = page;
+
+  const address = buildAddress(hex, vol, page) + '|type:image';
+  document.getElementById('i-address').textContent = address;
+
+  const bytes = await bytesFromAddress(address, NOISE_GRID*NOISE_GRID);
+  const canvas = document.getElementById('i-canvas');
+  drawGrayscale(canvas, bytes, NOISE_GRID);
+}
+
+function randomImageAddress(){
+  document.getElementById('i-hex').value = Math.random().toString(36).slice(2,10);
+  document.getElementById('i-vol').value = 1 + Math.floor(Math.random()*32);
+  document.getElementById('i-page').value = 1 + Math.floor(Math.random()*410);
+  renderImage();
+}
+
+function handleImageUpload(event){
+  const file = event.target.files[0];
+  const errEl = document.getElementById('img-error');
+  errEl.textContent = '';
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e){
+    const img = new Image();
+    img.onload = async function(){
+      // fit the image into a square UPLOAD_GRID x UPLOAD_GRID canvas
+      // (cover-crop so it isn't squished), keeping full color so it
+      // renders as the real photo, not a bilevel approximation
+      const tmp = document.createElement('canvas');
+      tmp.width = UPLOAD_GRID;
+      tmp.height = UPLOAD_GRID;
+      const tctx = tmp.getContext('2d');
+
+      const scale = Math.max(UPLOAD_GRID / img.width, UPLOAD_GRID / img.height);
+      const drawW = img.width * scale;
+      const drawH = img.height * scale;
+      const dx = (UPLOAD_GRID - drawW) / 2;
+      const dy = (UPLOAD_GRID - drawH) / 2;
+      tctx.drawImage(img, dx, dy, drawW, drawH);
+
+      const data = tctx.getImageData(0, 0, UPLOAD_GRID, UPLOAD_GRID).data;
+
+      // derive a stable address from the image's actual pixel content
+      let bytesForHash = [];
+      for(let i=0;i<data.length;i+=4){
+        bytesForHash.push(data[i], data[i+1], data[i+2]);
+      }
+      const contentStr = bytesForHash.join(',');
+      const hash = await sha256Hex('babel-image-seed:' + contentStr);
+      const big = hexToBigInt(hash);
+      const vol = Number(big % 32n) + 1;
+      const page = Number((big / 32n) % 410n) + 1;
+      const hexName = hash.slice(0,12);
+      const address = buildAddress(hexName, vol, page) + '|type:image';
+
+      document.getElementById('img-address').style.display = 'block';
+      document.getElementById('img-address').textContent = address;
+      document.getElementById('img-canvas-wrap').style.display = 'flex';
+
+      const outCanvas = document.getElementById('img-canvas');
+      outCanvas.width = UPLOAD_GRID;
+      outCanvas.height = UPLOAD_GRID;
+      const outCtx = outCanvas.getContext('2d');
+      outCtx.putImageData(tctx.getImageData(0,0,UPLOAD_GRID,UPLOAD_GRID), 0, 0);
+    };
+    img.onerror = function(){
+      errEl.textContent = 'Could not load that file as an image.';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function goToLibrary(){
+  document.getElementById('home').style.display = 'none';
+  document.getElementById('about').style.display = 'none';
+  document.getElementById('library').style.display = 'block';
+  renderBrowse();
+}
+function goToAbout(){
+  document.getElementById('home').style.display = 'none';
+  document.getElementById('library').style.display = 'none';
+  document.getElementById('about').style.display = 'block';
+}
+function goHome(){
+  document.getElementById('library').style.display = 'none';
+  document.getElementById('about').style.display = 'none';
+  document.getElementById('home').style.display = 'flex';
+}
+</script>
+</body>
+</html>
