@@ -140,6 +140,13 @@
     font-size: 0.75rem;
     color: var(--dim);
     word-break: break-all;
+    max-height: 120px;
+    overflow-y: auto;
+  }
+  #b-address-input{
+    min-height: 90px;
+    font-size: 0.72rem;
+    word-break: break-all;
   }
 
   .page{
@@ -214,18 +221,24 @@ WHAT THIS IS
 Yo's Library is a space that contains every possible page of text,
 and now every possible image, without storing any of them.
 
-Nothing is saved anywhere. Every page or image is computed on the
-spot from its address (hexagon / volume / page), using that address
-as a seed for a deterministic generator. Feed it the same address
-twice, get the exact same result twice — but nothing exists until
-you ask for it.
+Nothing is saved anywhere. Every page is computed on the spot from
+its address — and for text, that address is not a lookup key or a
+hash, it's the page's own 3,200 characters read as one giant number.
+Converting text into that number and converting the number back into
+text are exact opposites of each other, so the same address always
+decodes to the exact same page, whether you got there by BROWSE or
+by SEARCH.
 
 TEXT
 
 Each page holds 3,200 characters drawn from a 29-symbol alphabet
-(a-z, space, comma, period). SEARCH works in reverse: type any text,
-and it's hashed into a valid address that reproduces a page
-containing your exact words.
+(a-z, space, comma, period). SEARCH takes whatever you type, pads it
+out to a full page, and converts that page into its address. BROWSE
+does the reverse: paste any address and it's decoded straight back
+into the 3,200 characters it represents. Because addresses carry the
+full weight of that information, they end up thousands of characters
+long — there's no way to compress a page down to something short
+without losing the page.
 
 IMAGES
 
@@ -280,25 +293,13 @@ upload is ever sent anywhere.
 
     <!-- BROWSE VIEW -->
     <div class="view active" id="view-browse">
-      <div class="coords">
-        <div>
-          <label>HEXAGON</label>
-          <input type="text" id="b-hex" value="1">
-        </div>
-        <div>
-          <label>VOLUME</label>
-          <input type="number" id="b-vol" value="1" min="1" max="32">
-        </div>
-        <div>
-          <label>PAGE</label>
-          <input type="number" id="b-page" value="1" min="1" max="410">
-        </div>
-      </div>
+      <label>ADDRESS</label>
+      <textarea id="b-address-input" placeholder="paste an address here, or hit RANDOM"></textarea>
       <div class="actions">
         <button onclick="renderBrowse()">OPEN PAGE</button>
         <button class="ghost" onclick="randomAddress()">RANDOM</button>
       </div>
-      <div class="address" id="b-address"></div>
+      <div class="error" id="b-error"></div>
       <div class="page" id="b-output"></div>
     </div>
 
@@ -311,6 +312,9 @@ upload is ever sent anywhere.
       </div>
       <div class="error" id="s-error"></div>
       <div class="address" id="s-address" style="display:none;"></div>
+      <div class="actions" id="s-open-wrap" style="display:none;">
+        <button class="ghost" onclick="openInBrowse()">OPEN THIS ADDRESS IN BROWSE →</button>
+      </div>
       <div class="page" id="s-output" style="display:none;"></div>
     </div>
 
@@ -392,59 +396,106 @@ function makeRng(seedBig){
   };
 }
 
-async function generatePage(address){
-  const hex = await sha256Hex(address);
-  const seed = hexToBigInt(hex);
-  const rng = makeRng(seed);
-  let out = '';
-  for(let i=0;i<PAGE_LEN;i++){
-    const r = rng();
-    out += ALPHABET[Number(r % BigInt(BASE))];
-  }
-  return out;
-}
-
 function formatPage(raw){
   let lines = [];
   for(let i=0;i<LINES;i++) lines.push(raw.slice(i*LINE_LEN, (i+1)*LINE_LEN));
   return lines.join('\n');
 }
 
-function buildAddress(hex, vol, page){
-  return `hex:${hex}|vol:${vol}|page:${page}`;
-}
 function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
 
-async function renderBrowse(){
-  const hex = document.getElementById('b-hex').value.trim() || '1';
-  const vol = clamp(parseInt(document.getElementById('b-vol').value)||1,1,32);
-  const page = clamp(parseInt(document.getElementById('b-page').value)||1,1,410);
-  document.getElementById('b-vol').value = vol;
-  document.getElementById('b-page').value = page;
+// ---------- TRUE BIJECTIVE TEXT <-> ADDRESS ----------
+// A page's content, read as base-29 digits, IS the address (shown as
+// a compact base-36 string). No hashing, no lookup — converting text
+// to a number and converting a number back to text are exact inverses
+// of each other, so the same address always yields the same page.
 
-  const address = buildAddress(hex, vol, page);
-  document.getElementById('b-address').textContent = address;
-  document.getElementById('b-output').textContent = 'computing...';
-
-  const raw = await generatePage(address);
-  document.getElementById('b-output').textContent = formatPage(raw);
+function contentToBigInt(text){
+  // text must be exactly PAGE_LEN characters, each in ALPHABET
+  let n = 0n;
+  const B = BigInt(BASE);
+  for(let i=0;i<text.length;i++){
+    n = n * B + BigInt(ALPHABET.indexOf(text[i]));
+  }
+  return n;
 }
 
-function randomAddress(){
-  document.getElementById('b-hex').value = Math.random().toString(36).slice(2,10);
-  document.getElementById('b-vol').value = 1 + Math.floor(Math.random()*32);
-  document.getElementById('b-page').value = 1 + Math.floor(Math.random()*410);
+function bigIntToContent(n){
+  const B = BigInt(BASE);
+  const chars = new Array(PAGE_LEN);
+  let x = n;
+  for(let i=PAGE_LEN-1;i>=0;i--){
+    chars[i] = ALPHABET[Number(x % B)];
+    x = x / B;
+  }
+  return chars.join('');
+}
+
+const B36_DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
+
+function bigIntToBase36(n){
+  return n.toString(36);
+}
+
+function base36ToBigInt(str){
+  let n = 0n;
+  const s = str.trim().toLowerCase();
+  for(const c of s){
+    const d = B36_DIGITS.indexOf(c);
+    if(d === -1) continue; // silently skip stray characters (e.g. accidental whitespace)
+    n = n * 36n + BigInt(d);
+  }
+  return n;
+}
+
+// deterministic filler for padding short search text to a full page,
+// derived purely from the text itself so the same input always
+// produces the same padded page (and therefore the same address)
+async function fillerFor(seedText, length){
+  const hex = await sha256Hex('filler:' + seedText);
+  const seed = hexToBigInt(hex);
+  const rng = makeRng(seed);
+  let out = '';
+  for(let i=0;i<length;i++){
+    out += ALPHABET[Number(rng() % BigInt(BASE))];
+  }
+  return out;
+}
+
+async function renderBrowse(){
+  const errEl = document.getElementById('b-error');
+  errEl.textContent = '';
+  const raw = document.getElementById('b-address-input').value.trim();
+  if(raw.length === 0){
+    errEl.textContent = 'Enter or generate an address first.';
+    document.getElementById('b-output').textContent = '';
+    return;
+  }
+  document.getElementById('b-output').textContent = 'computing...';
+  const big = base36ToBigInt(raw);
+  const content = bigIntToContent(big);
+  document.getElementById('b-output').textContent = formatPage(content);
+}
+
+async function randomAddress(){
+  // build a random full page, then derive its address the same way
+  // search does — proving both paths use the same math
+  let text = '';
+  for(let i=0;i<PAGE_LEN;i++) text += ALPHABET[Math.floor(Math.random()*BASE)];
+  const big = contentToBigInt(text);
+  const addr = bigIntToBase36(big);
+  document.getElementById('b-address-input').value = addr;
   renderBrowse();
 }
 
 async function doSearch(){
   const errEl = document.getElementById('s-error');
   errEl.textContent = '';
-  let raw = document.getElementById('s-input').value.toLowerCase();
+  let rawInput = document.getElementById('s-input').value.toLowerCase();
 
   // sanitize: normalize whitespace, drop apostrophes/quotes, replace
   // anything else not in the alphabet with a space
-  let text = raw
+  let text = rawInput
     .replace(/[\r\n\t]+/g, ' ')
     .replace(/['’‘"“”]/g, '')
     .split('')
@@ -462,21 +513,27 @@ async function doSearch(){
     text = text.slice(0, PAGE_LEN);
   }
 
-  const hex = await sha256Hex('babel-content-seed:' + text);
-  const big = hexToBigInt(hex);
-  const vol = Number(big % 32n) + 1;
-  const page = Number((big / 32n) % 410n) + 1;
-  const hexName = hex.slice(0,12);
+  const filler = await fillerFor(text, PAGE_LEN - text.length);
+  const composed = text + filler;
 
-  const address = buildAddress(hexName, vol, page);
-  const padSeedAddress = address + '|content:' + text;
-  const fullRaw = await generatePage(padSeedAddress);
-  const composed = text + fullRaw.slice(text.length);
+  const big = contentToBigInt(composed);
+  const address = bigIntToBase36(big);
 
   document.getElementById('s-address').style.display = 'block';
-  document.getElementById('s-address').textContent = address + '  (searched: "' + text + '")';
+  document.getElementById('s-address').textContent = address;
+  document.getElementById('s-open-wrap').style.display = 'flex';
   document.getElementById('s-output').style.display = 'block';
   document.getElementById('s-output').textContent = formatPage(composed);
+
+  // stash for the "open in browse" button
+  window.__lastSearchAddress = address;
+}
+
+function openInBrowse(){
+  if(!window.__lastSearchAddress) return;
+  document.getElementById('b-address-input').value = window.__lastSearchAddress;
+  setMode('browse');
+  renderBrowse();
 }
 
 function setMode(mode){
@@ -619,7 +676,7 @@ function goToLibrary(){
   document.getElementById('home').style.display = 'none';
   document.getElementById('about').style.display = 'none';
   document.getElementById('library').style.display = 'block';
-  renderBrowse();
+  randomAddress();
 }
 function goToAbout(){
   document.getElementById('home').style.display = 'none';
