@@ -310,6 +310,7 @@ upload is ever sent anywhere.
       <button id="btn-search" onclick="setMode('search')">SEARCH</button>
       <button id="btn-images" onclick="setMode('images')">IMAGES</button>
       <button id="btn-audio" onclick="setMode('audio')">AUDIO</button>
+      <button id="btn-files" onclick="setMode('files')">FILES</button>
     </div>
 
     <!-- BROWSE VIEW -->
@@ -413,6 +414,34 @@ upload is ever sent anywhere.
         <button class="ghost" onclick="stopAudio()">■ STOP</button>
       </div>
       <div class="hint" id="a-status">32 notes // deterministic synth // seeded from the address</div>
+    </div>
+
+    <!-- FILES VIEW -->
+    <div class="view" id="view-files">
+      <div class="coords">
+        <div>
+          <label>HEXAGON</label>
+          <input type="text" id="f-hex" value="1">
+        </div>
+        <div>
+          <label>VOLUME</label>
+          <input type="number" id="f-vol" value="1" min="1" max="32">
+        </div>
+        <div>
+          <label>PAGE</label>
+          <input type="number" id="f-page" value="1" min="1" max="410">
+        </div>
+      </div>
+      <div class="actions">
+        <button onclick="renderFile()">OPEN FILE</button>
+        <button class="ghost" onclick="randomFileAddress()">RANDOM</button>
+      </div>
+      <div class="address" id="f-address"></div>
+      <div class="hint" id="f-filename"></div>
+      <div class="page" id="f-output"></div>
+      <div class="actions">
+        <button onclick="downloadCurrentFile()">⬇ DOWNLOAD</button>
+      </div>
     </div>
 
   </div>
@@ -597,13 +626,16 @@ function setMode(mode){
   document.getElementById('btn-search').classList.toggle('active', mode==='search');
   document.getElementById('btn-images').classList.toggle('active', mode==='images');
   document.getElementById('btn-audio').classList.toggle('active', mode==='audio');
+  document.getElementById('btn-files').classList.toggle('active', mode==='files');
   document.getElementById('view-browse').classList.toggle('active', mode==='browse');
   document.getElementById('view-search').classList.toggle('active', mode==='search');
   document.getElementById('view-images').classList.toggle('active', mode==='images');
   document.getElementById('view-audio').classList.toggle('active', mode==='audio');
+  document.getElementById('view-files').classList.toggle('active', mode==='files');
   if(mode !== 'audio') stopAudio();
   if(mode === 'images') renderImage();
   if(mode === 'audio') renderAudio();
+  if(mode === 'files') renderFile();
 }
 
 function setImgMode(mode){
@@ -840,6 +872,165 @@ function playAudio(){
   setTimeout(()=>{
     document.getElementById('a-status').textContent = `${NOTE_COUNT} notes // deterministic synth // seeded from the address`;
   }, totalDuration * 1000 + 100);
+}
+
+// ---------- FILES ----------
+// Same deterministic address -> content idea, applied to whole files:
+// logs, configs, JSON blobs, hex dumps. The extension, filename, and
+// content are all derived from one seeded RNG stream per address.
+const FILE_WORDS = ['auth','cache','daemon','kernel','buffer','socket',
+  'handshake','payload','cipher','node','relay','vector','trace','shell',
+  'proxy','token','frame','packet','thread','stack','heap','pointer',
+  'registry','session','cluster','array','matrix','signal','loop','core',
+  'grid','mesh','vault','ledger','beacon','probe','ghost','shard'];
+const FILE_LOG_LEVELS = ['INFO','WARN','ERROR','DEBUG'];
+const FILE_EXTENSIONS = ['.log','.json','.cfg','.dat','.txt','.sys','.tmp','.bak'];
+
+let currentFile = null;
+
+function makeAddressRng(seedHex){
+  const seed = hexToBigInt(seedHex);
+  const rng = makeRng(seed);
+  return {
+    byte: () => Number(rng() % 256n),
+    int: (max) => Number(rng() % BigInt(max)),
+    raw: rng
+  };
+}
+
+function genLog(R){
+  const lines = 10 + R.int(10);
+  const out = [];
+  for(let i=0;i<lines;i++){
+    const y = 2020 + R.int(30);
+    const mo = String(1+R.int(12)).padStart(2,'0');
+    const d = String(1+R.int(28)).padStart(2,'0');
+    const h = String(R.int(24)).padStart(2,'0');
+    const mi = String(R.int(60)).padStart(2,'0');
+    const s = String(R.int(60)).padStart(2,'0');
+    const level = FILE_LOG_LEVELS[R.int(FILE_LOG_LEVELS.length)];
+    const w1 = FILE_WORDS[R.int(FILE_WORDS.length)];
+    const w2 = FILE_WORDS[R.int(FILE_WORDS.length)];
+    const code = R.int(9999);
+    out.push(`[${y}-${mo}-${d} ${h}:${mi}:${s}] ${level} ${w1}: ${w2} failure code ${code}`);
+  }
+  return out.join('\n');
+}
+
+function genJson(R){
+  const obj = {};
+  const topKeys = 3 + R.int(4);
+  for(let i=0;i<topKeys;i++){
+    const key = FILE_WORDS[R.int(FILE_WORDS.length)] + '_' + FILE_WORDS[R.int(FILE_WORDS.length)];
+    const typeRoll = R.int(4);
+    if(typeRoll===0) obj[key] = R.int(100000);
+    else if(typeRoll===1) obj[key] = R.int(2) === 1;
+    else if(typeRoll===2) obj[key] = FILE_WORDS[R.int(FILE_WORDS.length)];
+    else obj[key] = Array.from({length: 2+R.int(3)}, () => R.int(1000));
+  }
+  return JSON.stringify(obj, null, 2);
+}
+
+function genCfg(R){
+  const n = 8 + R.int(8);
+  const lines = [];
+  for(let i=0;i<n;i++){
+    const key = FILE_WORDS[R.int(FILE_WORDS.length)] + '_' + FILE_WORDS[R.int(FILE_WORDS.length)];
+    const valRoll = R.int(3);
+    let val;
+    if(valRoll===0) val = R.int(9999);
+    else if(valRoll===1) val = R.int(2)===1 ? 'true' : 'false';
+    else val = FILE_WORDS[R.int(FILE_WORDS.length)];
+    lines.push(`${key}=${val}`);
+  }
+  return lines.join('\n');
+}
+
+function genHexDump(R){
+  const rows = 14 + R.int(10);
+  const lines = [];
+  for(let r=0;r<rows;r++){
+    const offset = (r*16).toString(16).padStart(4,'0');
+    const hexParts = [];
+    let ascii = '';
+    for(let c=0;c<16;c++){
+      const b = R.byte();
+      hexParts.push(b.toString(16).padStart(2,'0'));
+      ascii += (b>=32 && b<127) ? String.fromCharCode(b) : '.';
+    }
+    lines.push(`${offset}  ${hexParts.join(' ')}  ${ascii}`);
+  }
+  return lines.join('\n');
+}
+
+function genNoiseText(R, length){
+  let out = '';
+  for(let i=0;i<length;i++){
+    out += ALPHABET[R.int(BASE)];
+  }
+  // wrap at 70 chars for readability
+  const wrapped = [];
+  for(let i=0;i<out.length;i+=70) wrapped.push(out.slice(i,i+70));
+  return wrapped.join('\n');
+}
+
+async function fileFromAddress(address){
+  const hex = await sha256Hex(address + '|type:file');
+  const R = makeAddressRng(hex);
+
+  const ext = FILE_EXTENSIONS[R.int(FILE_EXTENSIONS.length)];
+  const word1 = FILE_WORDS[R.int(FILE_WORDS.length)];
+  const word2 = FILE_WORDS[R.int(FILE_WORDS.length)];
+  const suffix = Array.from({length:4}, () => R.byte().toString(16).padStart(2,'0')).join('').slice(0,4);
+  const filename = `${word1}_${word2}_${suffix}${ext}`;
+
+  let content;
+  switch(ext){
+    case '.log': content = genLog(R); break;
+    case '.json': content = genJson(R); break;
+    case '.cfg': content = genCfg(R); break;
+    case '.dat': content = genHexDump(R); break;
+    default: content = genNoiseText(R, 700);
+  }
+
+  return { filename, ext, content };
+}
+
+async function renderFile(){
+  const hex = document.getElementById('f-hex').value.trim() || '1';
+  const vol = clamp(parseInt(document.getElementById('f-vol').value)||1,1,32);
+  const page = clamp(parseInt(document.getElementById('f-page').value)||1,1,410);
+  document.getElementById('f-vol').value = vol;
+  document.getElementById('f-page').value = page;
+
+  const address = buildAddress(hex, vol, page);
+  document.getElementById('f-address').textContent = address;
+  document.getElementById('f-output').textContent = 'computing...';
+
+  const file = await fileFromAddress(address);
+  currentFile = file;
+  document.getElementById('f-filename').textContent = file.filename;
+  document.getElementById('f-output').textContent = file.content;
+}
+
+function randomFileAddress(){
+  document.getElementById('f-hex').value = Math.random().toString(36).slice(2,10);
+  document.getElementById('f-vol').value = 1 + Math.floor(Math.random()*32);
+  document.getElementById('f-page').value = 1 + Math.floor(Math.random()*410);
+  renderFile();
+}
+
+function downloadCurrentFile(){
+  if(!currentFile) return;
+  const blob = new Blob([currentFile.content], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = currentFile.filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function goToLibrary(){
