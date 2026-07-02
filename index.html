@@ -404,6 +404,10 @@ function formatPage(raw){
 
 function clamp(n,min,max){ return Math.max(min, Math.min(max, n)); }
 
+function buildAddress(hex, vol, page){
+  return `hex:${hex}|vol:${vol}|page:${page}`;
+}
+
 // ---------- TRUE BIJECTIVE TEXT <-> ADDRESS ----------
 // A page's content, read as base-29 digits, IS the address (shown as
 // a compact base-36 string). No hashing, no lookup — converting text
