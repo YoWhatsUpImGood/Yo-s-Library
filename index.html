@@ -184,6 +184,12 @@
   #img-canvas{
     image-rendering: auto;
   }
+  .hint{
+    font-size: 0.7rem;
+    color: var(--dim);
+    margin-top: 10px;
+    letter-spacing: 0.5px;
+  }
   input[type=file]{
     width:100%;
     background: transparent;
@@ -247,13 +253,22 @@ the same way as text pages. UPLOAD lets you drop in a real photo,
 which gets hashed into its own address and displayed at full
 resolution and color.
 
+AUDIO
+
+Every address also seeds a short deterministic track — 32 notes,
+each with its own pitch, duration, and waveform, all derived from
+the same address. Same address in, same 32 notes out, every time.
+Almost everything you'll hear is atonal noise, for exactly the same
+reason almost every text page is gibberish — but it's real synthesis
+running through your speakers, not random static.
+
 WHY IT'S ALL NOISE
 
 Almost everything you'll ever open here is gibberish — meaningless
-text, static-like images. That's not a bug, it's the entire point of
-the original concept. A page of English prose is one incredibly rare
-outcome among 29^3200 possible pages. That number has roughly 4,677
-digits.
+text, static-like images, tuneless audio. That's not a bug, it's the
+entire point of the original concept. A page of English prose is one
+incredibly rare outcome among 29^3200 possible pages. That number has
+roughly 4,677 digits.
 
 For comparison: the number of atoms in the entire observable universe
 is only about 10^80 — a mere 81 digits. The space of possible pages
@@ -269,6 +284,11 @@ continuously since the beginning of time and never once land on
 something that looks like a photograph. Pure noise is not just the
 likely outcome here — it is, for all practical purposes, the only
 possible outcome.
+
+Audio works the same way. With 32 notes drawn from roughly 3 octaves
+and 4 waveforms, there are billions of possible short tracks — and
+only a vanishingly small fraction of them would sound like real
+music rather than random beeping.
 
 Everything runs client-side in your browser. Nothing you type or
 upload is ever sent anywhere.
@@ -289,6 +309,7 @@ upload is ever sent anywhere.
       <button id="btn-browse" class="active" onclick="setMode('browse')">BROWSE</button>
       <button id="btn-search" onclick="setMode('search')">SEARCH</button>
       <button id="btn-images" onclick="setMode('images')">IMAGES</button>
+      <button id="btn-audio" onclick="setMode('audio')">AUDIO</button>
     </div>
 
     <!-- BROWSE VIEW -->
@@ -361,6 +382,37 @@ upload is ever sent anywhere.
           <canvas id="img-canvas" width="256" height="256"></canvas>
         </div>
       </div>
+    </div>
+
+    <!-- AUDIO VIEW -->
+    <div class="view" id="view-audio">
+      <div class="coords">
+        <div>
+          <label>HEXAGON</label>
+          <input type="text" id="a-hex" value="1">
+        </div>
+        <div>
+          <label>VOLUME</label>
+          <input type="number" id="a-vol" value="1" min="1" max="32">
+        </div>
+        <div>
+          <label>PAGE</label>
+          <input type="number" id="a-page" value="1" min="1" max="410">
+        </div>
+      </div>
+      <div class="actions">
+        <button onclick="renderAudio()">OPEN TRACK</button>
+        <button class="ghost" onclick="randomAudioAddress()">RANDOM</button>
+      </div>
+      <div class="address" id="a-address"></div>
+      <div class="page" id="a-canvas-wrap" style="display:flex; justify-content:center; padding:20px;">
+        <canvas id="a-canvas" width="600" height="120"></canvas>
+      </div>
+      <div class="actions">
+        <button onclick="playAudio()">▶ PLAY</button>
+        <button class="ghost" onclick="stopAudio()">■ STOP</button>
+      </div>
+      <div class="hint" id="a-status">32 notes // deterministic synth // seeded from the address</div>
     </div>
 
   </div>
@@ -544,10 +596,14 @@ function setMode(mode){
   document.getElementById('btn-browse').classList.toggle('active', mode==='browse');
   document.getElementById('btn-search').classList.toggle('active', mode==='search');
   document.getElementById('btn-images').classList.toggle('active', mode==='images');
+  document.getElementById('btn-audio').classList.toggle('active', mode==='audio');
   document.getElementById('view-browse').classList.toggle('active', mode==='browse');
   document.getElementById('view-search').classList.toggle('active', mode==='search');
   document.getElementById('view-images').classList.toggle('active', mode==='images');
+  document.getElementById('view-audio').classList.toggle('active', mode==='audio');
+  if(mode !== 'audio') stopAudio();
   if(mode === 'images') renderImage();
+  if(mode === 'audio') renderAudio();
 }
 
 function setImgMode(mode){
@@ -674,6 +730,116 @@ function handleImageUpload(event){
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
+}
+
+// ---------- AUDIO ----------
+// Same idea as text/images: an address seeds a deterministic sequence
+// of notes. Most addresses will sound like atonal noise — that's
+// expected, the same way most text pages are gibberish.
+const NOTE_COUNT = 32;
+const MIDI_LOW = 48;   // C3
+const MIDI_HIGH = 83;  // B5
+const WAVEFORMS = ['sine','square','sawtooth','triangle'];
+
+let audioCtx = null;
+let activeNodes = [];
+let currentNotes = [];
+
+function midiToFreq(midi){
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+async function notesFromAddress(address){
+  const bytes = await bytesFromAddress(address + '|type:audio', NOTE_COUNT * 3);
+  const notes = [];
+  for(let i=0;i<NOTE_COUNT;i++){
+    const pitchByte = bytes[i*3];
+    const durByte = bytes[i*3+1];
+    const waveByte = bytes[i*3+2];
+    const midi = MIDI_LOW + Math.floor((pitchByte / 256) * (MIDI_HIGH - MIDI_LOW + 1));
+    const duration = 0.08 + (durByte / 255) * 0.24; // 80ms - 320ms
+    const waveform = WAVEFORMS[waveByte % WAVEFORMS.length];
+    notes.push({ freq: midiToFreq(midi), duration, waveform, pitchByte });
+  }
+  return notes;
+}
+
+function drawNotes(canvas, notes){
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0,0,w,h);
+  const barW = w / notes.length;
+  ctx.fillStyle = '#fff';
+  notes.forEach((n, i) => {
+    const barH = (n.pitchByte / 255) * (h - 10) + 4;
+    ctx.fillRect(i*barW + 2, h - barH, barW - 4, barH);
+  });
+}
+
+async function renderAudio(){
+  const hex = document.getElementById('a-hex').value.trim() || '1';
+  const vol = clamp(parseInt(document.getElementById('a-vol').value)||1,1,32);
+  const page = clamp(parseInt(document.getElementById('a-page').value)||1,1,410);
+  document.getElementById('a-vol').value = vol;
+  document.getElementById('a-page').value = page;
+
+  const address = buildAddress(hex, vol, page);
+  document.getElementById('a-address').textContent = address;
+
+  currentNotes = await notesFromAddress(address);
+  const canvas = document.getElementById('a-canvas');
+  drawNotes(canvas, currentNotes);
+  document.getElementById('a-status').textContent = `${NOTE_COUNT} notes // deterministic synth // seeded from the address`;
+}
+
+function randomAudioAddress(){
+  document.getElementById('a-hex').value = Math.random().toString(36).slice(2,10);
+  document.getElementById('a-vol').value = 1 + Math.floor(Math.random()*32);
+  document.getElementById('a-page').value = 1 + Math.floor(Math.random()*410);
+  renderAudio();
+}
+
+function stopAudio(){
+  activeNodes.forEach(node => {
+    try{ node.stop(); }catch(e){}
+    try{ node.disconnect(); }catch(e){}
+  });
+  activeNodes = [];
+  document.getElementById('a-status').textContent = `${NOTE_COUNT} notes // deterministic synth // seeded from the address`;
+}
+
+function playAudio(){
+  if(currentNotes.length === 0) return;
+  stopAudio();
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+
+  let t = audioCtx.currentTime + 0.05;
+  currentNotes.forEach(note => {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = note.waveform;
+    osc.frequency.value = note.freq;
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.15, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + note.duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + note.duration + 0.02);
+    activeNodes.push(osc);
+    t += note.duration;
+  });
+
+  document.getElementById('a-status').textContent = 'playing...';
+  const totalDuration = currentNotes.reduce((s,n)=>s+n.duration,0);
+  setTimeout(()=>{
+    document.getElementById('a-status').textContent = `${NOTE_COUNT} notes // deterministic synth // seeded from the address`;
+  }, totalDuration * 1000 + 100);
 }
 
 function goToLibrary(){
